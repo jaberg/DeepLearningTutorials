@@ -32,18 +32,13 @@ References:
     - textbooks: "Pattern Recognition and Machine Learning" - 
                  Christopher M. Bishop, section 4.3.2
 
-
 """
 __docformat__ = 'restructedtext en'
 
+import time, cPickle, gzip
 
-import numpy, cPickle, gzip
-
-import time
-
-import theano
+import numpy, theano
 import theano.tensor as T
-
 import theano.tensor.nnet
 
 
@@ -74,11 +69,11 @@ class LogisticRegression(object):
         """ 
 
         # initialize with 0 the weights W as a matrix of shape (n_in, n_out) 
-        self.W = theano.shared( value=numpy.zeros((n_in,n_out),
-                                            dtype = theano.config.floatX) )
+        self.W = theano.shared(value=numpy.zeros((n_in,n_out), dtype = theano.config.floatX),
+                                name='W')
         # initialize the baises b as a vector of n_out 0s
-        self.b = theano.shared( value=numpy.zeros((n_out,), 
-                                            dtype = theano.config.floatX) )
+        self.b = theano.shared(value=numpy.zeros((n_out,), dtype = theano.config.floatX),
+                               name='b')
 
 
         # compute vector of class-membership probabilities in symbolic form
@@ -110,6 +105,7 @@ class LogisticRegression(object):
         the learning rate is less dependent on the batch size
         """
         return -T.mean(T.log(self.p_y_given_x)[T.arange(y.shape[0]),y])
+        #return -T.sum(T.log(self.p_y_given_x)[T.arange(y.shape[0]),y])/200
 
 
 
@@ -134,10 +130,7 @@ class LogisticRegression(object):
             raise NotImplementedError()
 
 
-
-
-
-def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
+def sgd_optimization_mnist(learning_rate=0.13, n_iter=100, mnist_pkl_gz='mnist.pkl.gz'):
     """
     Demonstrate stochastic gradient descent optimization of a log-linear 
     model
@@ -149,57 +142,43 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
 
     :param n_iter: maximal number of iterations ot run the optimizer 
 
+    :param mnist_pkl_gz: the path of the mnist training file from 
+                         http://www.iro.umontreal.ca/~lisa/deep/data/mnist/mnist.pkl.gz
+
     """
 
     # Load the dataset 
-    f = gzip.open('mnist.pkl.gz','rb')
+    f = gzip.open(mnist_pkl_gz,'rb')
     train_set, valid_set, test_set = cPickle.load(f)
     f.close()
 
-    # make minibatches of size 20 
-    batch_size = 20    # sized of the minibatch
 
-    # Dealing with the training set
-    # get the list of training images (x) and their labels (y)
-    (train_set_x, train_set_y) = train_set
-    # initialize the list of training minibatches with empty list
-    train_batches = []
-    for i in xrange(0, len(train_set_x), batch_size):
-        # add to the list of minibatches the minibatch starting at 
-        # position i, ending at position i+batch_size
-        # a minibatch is a pair ; the first element of the pair is a list 
-        # of datapoints, the second element is the list of corresponding 
-        # labels
-        train_batches = train_batches + \
-               [(train_set_x[i:i+batch_size], train_set_y[i:i+batch_size])]
+    def shared_dataset(data_xy):
+        data_x, data_y = data_xy
+        shared_x = theano.shared(numpy.asarray(data_x, dtype=theano.config.floatX))
+        shared_y = theano.shared(numpy.asarray(data_x, dtype=theano.config.floatX))
+        return shared_x, T.cast(shared_y, 'int32')
 
-    # Dealing with the validation set
-    (valid_set_x, valid_set_y) = valid_set
-    # initialize the list of validation minibatches 
-    valid_batches = []
-    for i in xrange(0, len(valid_set_x), batch_size):
-        valid_batches = valid_batches + \
-               [(valid_set_x[i:i+batch_size], valid_set_y[i:i+batch_size])]
+    test_set_x, test_set_y = shared_dataset(test_set)
+    valid_set_x, valid_set_y = shared_dataset(valid_set)
+    train_set_x, train_set_y = shared_dataset(train_set)
 
-    # Dealing with the testing set
-    (test_set_x, test_set_y) = test_set
-    # initialize the list of testing minibatches 
-    test_batches = []
-    for i in xrange(0, len(test_set_x), batch_size):
-        test_batches = test_batches + \
-              [(test_set_x[i:i+batch_size], test_set_y[i:i+batch_size])]
+    batch_size = 100    # sized of the minibatch
 
-
-    ishape     = (28,28) # this is the size of MNIST images
+    n_minibatches = train_set_x.value.shape[0]/batch_size
 
     # allocate symbolic variables for the data
-    x = T.fmatrix()  # the data is presented as rasterized images
-    y = T.lvector()  # the labels are presented as 1D vector of 
-                     # [long int] labels
+    minibatch_offset = T.lscalar() # offset to the start of a [mini]batch 
+    x = T.matrix('x')  # the data is presented as rasterized images
+    y = T.ivector('y') # the labels are presented as 1D vector of 
+                       # [int] labels
 
     # construct the logistic regression class
-    classifier = LogisticRegression( \
-                   input=x.reshape((batch_size,28*28)), n_in=28*28, n_out=10)
+    # Each MNIST image has size 28*28
+    classifier = LogisticRegression(
+            input=x.reshape((batch_size,28*28)),
+            n_in=28*28,
+            n_out=10)
 
     # the cost we minimize during training is the negative log likelihood of 
     # the model in symbolic format
@@ -207,7 +186,15 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
 
     # compiling a Theano function that computes the mistakes that are made by 
     # the model on a minibatch
-    test_model = theano.function([x,y], classifier.errors(y))
+    test_model = theano.function([minibatch_offset], classifier.errors(y),
+            givens={
+                x:test_set_x[minibatch_offset:minibatch_offset+batch_size],
+                y:test_set_y[minibatch_offset:minibatch_offset+batch_size]})
+
+    validate_model = theano.function([minibatch_offset], classifier.errors(y),
+            givens={
+                x:valid_set_x[minibatch_offset:minibatch_offset+batch_size],
+                y:valid_set_y[minibatch_offset:minibatch_offset+batch_size]})
 
     # compute the gradient of cost with respect to theta = (W,b) 
     g_W = T.grad(cost, classifier.W)
@@ -220,10 +207,11 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
     # compiling a Theano function `train_model` that returns the cost, but in 
     # the same time updates the parameter of the model based on the rules 
     # defined in `updates`
-    train_model = theano.function([x, y], cost, updates = updates )
+    train_model = theano.function([minibatch_offset], cost, updates = updates,
+            givens={
+                x:train_set_x[minibatch_offset:minibatch_offset+batch_size],
+                y:train_set_y[minibatch_offset:minibatch_offset+batch_size]})
 
-    n_minibatches        = len(train_batches) # number of minibatchers
- 
     # early-stopping parameters
     patience              = 5000  # look as this many examples regardless
     patience_increase     = 2     # wait this much longer when a new best is 
@@ -242,23 +230,20 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
     # have a maximum of `n_iter` iterations through the entire dataset
     for iter in xrange(n_iter* n_minibatches):
 
-        # get epoch and minibatch index
+        # get epoch and minibatch index for training set
         epoch           = iter / n_minibatches
         minibatch_index =  iter % n_minibatches
+        minibatch_offset = minibatch_index * batch_size
 
         # get the minibatches corresponding to `iter` modulo
         # `len(train_batches)`
-        x,y = train_batches[ minibatch_index ]
-        cost_ij = train_model(x,y)
+        cost_ij = train_model(minibatch_offset)
 
         if (iter+1) % validation_frequency == 0: 
             # compute zero-one loss on validation set 
-            this_validation_loss = 0.
-            for x,y in valid_batches:
-                # sum up the errors for each minibatch
-                this_validation_loss += test_model(x,y)
-            # get the average by dividing with the number of minibatches
-            this_validation_loss /= len(valid_batches)
+            n_valid_batches = valid_set_x.value.shape[0] / batch_size
+            validation_losses = [validate_model(i*batch_size) for i in xrange(n_valid_batches)]
+            this_validation_loss = numpy.mean(validation_losses)
 
             print('epoch %i, minibatch %i/%i, validation error %f %%' % \
                  (epoch, minibatch_index+1,n_minibatches, \
@@ -275,10 +260,10 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
                 best_validation_loss = this_validation_loss
                 # test it on the test set
 
-                test_score = 0.
-                for x,y in test_batches:
-                    test_score += test_model(x,y)
-                test_score /= len(test_batches)
+                n_test_batches = test_set_x.value.shape[0] / batch_size
+                test_losses = [test_model(i*batch_size) for i in xrange(n_test_batches)]
+                test_score = numpy.mean(test_losses)
+
                 print(('     epoch %i, minibatch %i/%i, test error of best ' 
                        'model %f %%') % \
                   (epoch, minibatch_index+1, n_minibatches,test_score*100.))
@@ -292,11 +277,8 @@ def sgd_optimization_mnist( learning_rate=0.01, n_iter=100):
                  (best_validation_loss * 100., test_score*100.))
     print ('The code ran for %f minutes' % ((end_time-start_time)/60.))
 
-
-
-
-
-
+    print "THIS [output above] IS NOT WHAT THE DOCS SAY!"
+    print "Remember to update the RST files before merging to trunk"
 
 if __name__ == '__main__':
     sgd_optimization_mnist()
