@@ -156,14 +156,14 @@ def sgd_optimization_mnist(learning_rate=0.13, n_iter=100, mnist_pkl_gz='mnist.p
     def shared_dataset(data_xy):
         data_x, data_y = data_xy
         shared_x = theano.shared(numpy.asarray(data_x, dtype=theano.config.floatX))
-        shared_y = theano.shared(numpy.asarray(data_x, dtype=theano.config.floatX))
+        shared_y = theano.shared(numpy.asarray(data_y, dtype=theano.config.floatX))
         return shared_x, T.cast(shared_y, 'int32')
 
     test_set_x, test_set_y = shared_dataset(test_set)
     valid_set_x, valid_set_y = shared_dataset(valid_set)
     train_set_x, train_set_y = shared_dataset(train_set)
 
-    batch_size = 100    # sized of the minibatch
+    batch_size = 500    # sized of the minibatch
 
     n_minibatches = train_set_x.value.shape[0]/batch_size
 
