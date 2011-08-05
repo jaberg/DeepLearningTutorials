@@ -27,9 +27,11 @@ def sharedX(x, name=None):
             numpy.asarray(x, dtype=theano.config.floatX),
             name=name)
 
+
 def srandn(*size):
     return sharedX(
             numpy.random.randn(*size))
+
 
 class LinearRegression1D(unittest.TestCase):
     """
@@ -61,11 +63,9 @@ class LinearRegression1D(unittest.TestCase):
                     self.w: self.w - lr * self.gw,
                     self.b: self.b - lr * self.gb})
 
-        s_x = theano.tensor.vector()
-        #pred_f = theano.function([s_x], self.Yhat, givens={self.X: s_x}
-
         for i in xrange(100):
-            mse, yhat =  fit_step(0.01)
+            mse, yhat =  fit_step(1.0)
+            print i, mse
 
         if show_plots:
             plt.scatter(self.X.get_value(), self.Y.get_value(), label='data')
@@ -92,7 +92,21 @@ class LinearRegression1D(unittest.TestCase):
         schedule for the learning rate.  Show that you can converge to the same minimum we saw
         in test_fixed_lr much more quickly (in XXX steps).
         """
-        raise NotImplementedError()
+
+        lr = theano.tensor.scalar()
+        fit_step = theano.function([lr], [self.mse, self.Yhat], updates={
+                    self.w: self.w - lr * self.gw,
+                    self.b: self.b - lr * self.gb})
+
+        for i in xrange(100):
+            mse, yhat =  fit_step(1.0 / (.1 * i + 1))
+            print i, mse
+
+        if show_plots:
+            plt.scatter(self.X.get_value(), self.Y.get_value(), label='data')
+            plt.plot(self.X.get_value(), yhat, c='r', label='fit')
+            plt.legend()
+            plt.show()
 
 
 class RegularizedLinearRegression1D(unittest.TestCase):
@@ -110,28 +124,34 @@ class RegularizedLinearRegression1D(unittest.TestCase):
 
     def test_l1_regularization(self):
         """
+        Show the effect of L1 regularization in our simple 1D problem.
         """
         raise NotImplementedError()
 
     def test_l2_regularization(self):
         """
+        Show the effect of L2 regularization in our simple 1D problem.
         """
         raise NotImplementedError()
 
     def test_l1_and_l2_regularization(self):
         """
-        "Elastic Net"
+        L1 and L2 regularization can be combined.
+
+        Is there an application that you would obviously want to do this?
         """
         raise NotImplementedError()
+
 
 class LinearRegressionNd(unittest.TestCase):
     """
     """
     # How to visualize result?
 
+
 class Optimization(unittest.TestCase):
     """
-    In this suite of exercises we'll take the Linear Regression example from LinearRegressionNd
+    In this suite of exercises, take the Linear Regression example from LinearRegressionNd
     and compare some more sophisticated optimization methods than the simple one we've been
     using until now.
 
@@ -143,8 +163,7 @@ class Optimization(unittest.TestCase):
     def setUp(self):
         # pack weights and bias into one vector-shaped shared variable so that we can use scipy
         # solvers on that vector.
-
-        # Create
+        pass
 
     def test_cg(self):
         # 
@@ -160,3 +179,24 @@ class BayesianLinearRegression(unittest.TestCase):
     We can switch from a point estimate of weights w to a Gaussian prior over weights w and
     still carry out a computationally efficient (i.e. tractable) inference procedure.
     """
+
+
+class ParticleFilter(unittest.TestCase):
+    """
+    """
+
+
+class MCMC(unittest.TestCase):
+    """
+    """
+
+
+class HamiltonianMonteCarlo(unittest.TestCase):
+    """
+    """
+
+
+class RNN(unittest.TestCase):
+    """
+    """
+
