@@ -181,22 +181,3 @@ class BayesianLinearRegression(unittest.TestCase):
     """
 
 
-class ParticleFilter(unittest.TestCase):
-    """
-    """
-
-
-class MCMC(unittest.TestCase):
-    """
-    """
-
-
-class HamiltonianMonteCarlo(unittest.TestCase):
-    """
-    """
-
-
-class RNN(unittest.TestCase):
-    """
-    """
-
