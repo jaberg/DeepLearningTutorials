@@ -28,6 +28,12 @@ class IndexFromCounts(theano.Op):
     """
     A weird Op that you need for resampling with replacement.
     """
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __hash__(self):
+        return hash(type(self))
+
     def make_node(self, counts):
         # Return an Apply of this Op (self).
         # Do error checking, and create a (typed) output variable.
@@ -53,55 +59,18 @@ class IndexFromCounts(theano.Op):
         for i, c in enumerate(inputs[0]):
             l += [i]*c
         z_container[0] = numpy.asarray(l)
-
 index_from_counts = IndexFromCounts()
 
-class CIndexFromCounts(theano.Op):
-    def make_node(self, counts):
-        return theano.gof.Apply(self, [counts], [counts.type()])
-
-    def c_code(self, node, name, inp, out, sub):
-        counts, = inp   # counts: a string
-        z, = out        # z: a string
-        fail = sub['fail']
-        return """
-        npy_intp n_counts =  %(counts)s->dimensions[0];
-        dtype_%(counts)s counts_sum = 0;
-        dtype_%(counts)s * counts_data =
-            (dtype_%(counts)s*)(%(counts)s->data);
-
-        for (int i = 0; i < n_counts; ++i)
-        {
-            counts_sum += counts_data[i];
-        }
-        Py_XDECREF(%(z)s);
-        %(z)s = (PyArrayObject*)PyArray_SimpleNew(
-            1, &n_counts, PyArray_TYPE(%(counts)s));
-        dtype_%(z)s * z_data = (dtype_%(z)s*)(%(z)s->data);
-        for (int i = 0; i < n_counts; ++i)
-        {
-            for (int j = 0; j < counts_data[i]; ++j)
-            {
-                *z_data = i;
-                ++z_data;
-            }
-        }
-        """ % locals()
-c_index_from_counts = CIndexFromCounts()
-
-@theano.tensor.opt.register_specialize
-@theano.gof.local_optimizer([index_from_counts])
-def sub_cindex_from_counts(node):
-    print 'hello'
-    if node.op == index_from_counts:
-        return [c_index_from_counts(*node.inputs)]
 
 class ParticleFilter(unittest.TestCase):
     """
     """
 
     def dynamics(self, x, t):
-        return .5 * x + 25 * x / (1 + x**2) + 8 * T.cos(1.2 * t)
+        return .5 * x + 25 * x / (1 + x**2) + 8 * T.cos(0.2 * t)
+
+    def observation(self, x):
+        return x**2 / 20
 
     def resample(self, particles, weights):
         counts = self.s_rng.multinomial(
@@ -128,7 +97,7 @@ class ParticleFilter(unittest.TestCase):
         x = sharedX(0, name='x')
 
         x_next = self.dynamics(x, t) + v
-        y = x_next**2 / 20 + w
+        y = self.observation(x_next) + w # TODO: should this be x?
 
         print 'n_particles:', n_particles
         print 'system:', theano.printing.pprint(x_next)
@@ -200,3 +169,55 @@ class ParticleFilter(unittest.TestCase):
     def test_learning_by_other(self):
         """
         """
+
+
+class CIndexFromCounts(theano.Op):
+
+    def __eq__(self, other):
+        return type(self) == type(other)
+
+    def __hash__(self):
+        return hash(type(self))
+
+    def make_node(self, counts):
+        return theano.gof.Apply(self, [counts], [counts.type()])
+
+    def c_code_cache_version(self):
+        return (1,)
+
+    def c_code(self, node, name, inp, out, sub):
+        print "COMPILING!"
+        counts, = inp   # counts: a string
+        z, = out        # z: a string
+        fail = sub['fail']
+        return """
+        npy_intp n_counts =  %(counts)s->dimensions[0];
+        dtype_%(counts)s counts_sum = 0;
+        dtype_%(counts)s * counts_data =
+            (dtype_%(counts)s*)(%(counts)s->data);
+
+        for (int i = 0; i < n_counts; ++i)
+        {
+            counts_sum += counts_data[i];
+        }
+        Py_XDECREF(%(z)s);
+        %(z)s = (PyArrayObject*)PyArray_SimpleNew(
+            1, &n_counts, PyArray_TYPE(%(counts)s));
+        dtype_%(z)s * z_data = (dtype_%(z)s*)(%(z)s->data);
+        for (int i = 0; i < n_counts; ++i)
+        {
+            for (int j = 0; j < counts_data[i]; ++j)
+            {
+                *z_data = i;
+                ++z_data;
+            }
+        }
+        """ % locals()
+c_index_from_counts = CIndexFromCounts()
+
+@theano.tensor.opt.register_specialize
+@theano.gof.local_optimizer([index_from_counts])
+def sub_cindex_from_counts(node):
+    if node.op == index_from_counts:
+        return [c_index_from_counts(*node.inputs)]
+
