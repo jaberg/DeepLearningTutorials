@@ -178,6 +178,9 @@ class BayesianLinearRegression(unittest.TestCase):
     """
     We can switch from a point estimate of weights w to a Gaussian prior over weights w and
     still carry out a computationally efficient (i.e. tractable) inference procedure.
+
+    :note: see Danny Tarlow's python implementation
+    http://blog.smellthedata.com/2009/06/really-bayesian-logistic-regression-in.html
     """
 
 

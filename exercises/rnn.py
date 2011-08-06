@@ -117,3 +117,5 @@ class RNN_Opt(unittest.TestCase):
         Bonus: modify the function above to use the Hessian-Free solver of Martens (see Martens
         and Sutskever, 2011 for details).
         """
+
+
